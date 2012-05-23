@@ -5,9 +5,21 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="shared">
+      <UniqueIdentifier>{f6355b9f-9db3-4cad-a46c-27811485e33b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="phConnector.cpp" />
+    <ClCompile Include="shared\blowfish.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
+    <ClCompile Include="shared\silkroad_security.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
+    <ClCompile Include="shared\stream_utility.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="phConnector.rc">
@@ -22,6 +34,15 @@
   <ItemGroup>
     <ClInclude Include="resource.h">
       <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="shared\blowfish.h">
+      <Filter>shared</Filter>
+    </ClInclude>
+    <ClInclude Include="shared\silkroad_security.h">
+      <Filter>shared</Filter>
+    </ClInclude>
+    <ClInclude Include="shared\stream_utility.h">
+      <Filter>shared</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
