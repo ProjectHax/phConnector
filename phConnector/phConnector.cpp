@@ -11,6 +11,7 @@
 #include <boost/bind.hpp>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/make_shared.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
@@ -36,19 +37,100 @@ namespace Config
 	uint32_t DataMaxSize;		//The maximum number of bytes to receive in one packet
 };
 
+class BotConnection
+{
+private:
+public:
+
+	//Constructor
+	BotConnection()
+	{
+	}
+
+	//Destructor
+	~BotConnection()
+	{
+	}
+
+} Bot;
+
+//Silkroad connection class
+class SilkroadConnection
+{
+private:
+
+	//Socket
+	boost::shared_ptr<boost::asio::ip::tcp::socket> s;
+
+	//Data
+	std::vector<uint8_t> data;
+
+public:
+
+	//Constructor
+	SilkroadConnection(boost::shared_ptr<boost::asio::ip::tcp::socket> s_) : s(s_)
+	{
+		data.resize(Config::DataMaxSize + 1);
+	}
+
+	//Destructor
+	~SilkroadConnection()
+	{
+		Close();
+	}
+
+	//Closes the socket
+	void Close()
+	{
+		boost::system::error_code ec;
+		if(s)
+		{
+			s->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+			s->close(ec);
+		}
+	}
+};
+
+//Networking class (handles connections)
 class Network
 {
 private:
 
 	//Accepts TCP connections
-	boost::shared_ptr<boost::asio::ip::tcp::acceptor> acceptor;
+	boost::asio::ip::tcp::acceptor acceptor;
+
+	//Silkroad connections
+	boost::shared_ptr<SilkroadConnection> Silkroad;
+	boost::shared_ptr<SilkroadConnection> Joymax;
+
+	//Starts accepting new connections
+	void PostAccept(uint32_t count = 1)
+	{
+		for(uint32_t x = 0; x < count; ++x)
+		{
+			//The newly created socket will be used when something connects
+			boost::shared_ptr<boost::asio::ip::tcp::socket> s(boost::make_shared<boost::asio::ip::tcp::socket>(io_service));
+			acceptor.async_accept(*s, boost::bind(&Network::HandleAccept, this, s, boost::asio::placeholders::error));
+		}
+	}
+	
+	//Handles new connections
+	void HandleAccept(boost::shared_ptr<boost::asio::ip::tcp::socket> s, const boost::system::error_code & error)
+	{
+		//Error check
+		if(!error)
+		{
+			//Post another accept
+			PostAccept();
+		}
+	}
 
 public:
 
 	//Constructor
-	Network()
+	Network(uint16_t port) : acceptor(io_service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 	{
-
+		PostAccept();
 	}
 
 	//Destructor
@@ -61,11 +143,8 @@ public:
 	void Stop()
 	{
 		boost::system::error_code ec;
-		if(acceptor)
-		{
-			acceptor->close(ec);
-			acceptor->cancel(ec);
-		}
+		acceptor.close(ec);
+		acceptor.cancel(ec);
 	}
 };
 
@@ -100,7 +179,7 @@ int main(int argc, char* argv[])
 		catch(std::exception & e)
 		{
 			//Display error and exit
-			std::cout << "[Error] An error occurred while trying to retrieve settings from your config file." << std::endl;
+			std::cout << "[Fatal Error] An error occurred while trying to retrieve settings from your config file." << std::endl;
 			std::cout << e.what() << std::endl;
 			std::cin.get();
 			return 0;
@@ -108,7 +187,7 @@ int main(int argc, char* argv[])
 	}
 	else
 	{
-		std::cout << "Config file does not exist. Creating one." << std::endl;
+		std::cout << "[Error] Config file does not exist. Creating one." << std::endl;
 
 		//Create a config file, only need to save once so this part doesn't matter
 		std::fstream fs(boost::filesystem::path(executable_path() / "config.ini").generic_string(), std::ios::out);
@@ -130,9 +209,12 @@ int main(int argc, char* argv[])
 
 	//Let the user know which ports to connect to
 	std::cout << "Redirect Silkroad to 127.0.0.1:" << Config::GatewayBind << std::endl;
-	std::cout << "Redirect the bot to 127.0.0.1:" << Config::BotBind << std::endl;
+	std::cout << "Redirect the bot to 127.0.0.1:" << Config::BotBind << std::endl << std::endl;
 
-	//Start processing network events
+	//Create the network object
+	Network network(Config::GatewayBind);
+	
+	//Start processing network events (only need one thread because there will only be three connections total)
 	boost::system::error_code ec;
 	io_service.run(ec);
 
