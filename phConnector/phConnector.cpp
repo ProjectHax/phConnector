@@ -659,11 +659,11 @@ int main(int argc, char* argv[])
 		//Create a config file, only need to save once so this part doesn't matter
 		std::fstream fs(boost::filesystem::path(executable_path() / "config.ini").generic_string(), std::ios::out);
 		fs << "[phConnector]\r\n";
-		fs << "GatewayIP=gwgt1.joymax.com\r\n";
-		fs << "GatewayPort=15779\r\n\r\n";
-		fs << "BindPort=15779\r\n";
-		fs << "BotBind=22580\r\n\r\n";
-		fs << "DataMaxSize=16384";
+		fs << "GatewayIP=gwgt1.joymax.com\r\n";		//iSRO gateway server
+		fs << "GatewayPort=15779\r\n\r\n";			//iSRO gateway port
+		fs << "BindPort=15779\r\n";					//The port phConnector will listen on
+		fs << "BotBind=22580\r\n\r\n";				//The port the bot or analyzer will connect to
+		fs << "DataMaxSize=16384";					//Maximum number of bytes to receive in one packet
 		fs.close();
 
 		//Exit
@@ -681,11 +681,32 @@ int main(int argc, char* argv[])
 	Bot = boost::make_shared<BotConnection>(Config::BotBind);
 
 	//Start processing network events (only need one thread because there will only be three connections total)
-	boost::system::error_code ec;
-	io_service.run(ec);
+	while(true)
+	{
+		try
+		{
+			//Run
+			boost::system::error_code ec;
+			io_service.run(ec);
 
-	//Display error message if there was one
-	if(ec) std::cout << "[Error] " << ec.message() << std::endl;
+			if(ec)
+			{
+				std::cout << "[" << __FUNCTION__ << "]" << "[" << __LINE__ << "] " << ec.message() << std::endl;
+			}
+			else
+			{
+				//No more work
+				break;
+			}
+			
+			//Prevent high CPU usage
+			boost::this_thread::sleep(boost::posix_time::milliseconds(1));
+		}
+		catch(std::exception & e)
+		{
+			std::cout << "[" << __FUNCTION__ << "]" << "[" << __LINE__ << "] " << e.what() << std::endl;
+		}
+	}
 
 	//Cleanup
 	network.Stop();
