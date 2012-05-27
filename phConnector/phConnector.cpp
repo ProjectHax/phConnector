@@ -680,7 +680,7 @@ int main(int argc, char* argv[])
 	Network network(Config::BindPort);
 	Bot = boost::make_shared<BotConnection>(Config::BotBind);
 
-	//Start processing network events (only need one thread because there will only be three connections total)
+	//Start processing network events
 	while(true)
 	{
 		try
