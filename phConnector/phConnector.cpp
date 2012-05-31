@@ -503,7 +503,10 @@ private:
 
 				//Send packets that are currently in the security api
 				while(Silkroad.security->HasPacketToSend())
-					Silkroad.Send(Silkroad.security->GetPacketToSend());
+				{
+					if(!Silkroad.Send(Silkroad.security->GetPacketToSend()))
+						break;
+				}
 			}
 
 			if(Joymax.security)
@@ -567,7 +570,10 @@ private:
 
 				//Send packets that are currently in the security api
 				while(Joymax.security->HasPacketToSend())
-					Joymax.Send(Joymax.security->GetPacketToSend());
+				{
+					if(!Joymax.Send(Joymax.security->GetPacketToSend()))
+						break;
+				}
 			}
 
 Post:
