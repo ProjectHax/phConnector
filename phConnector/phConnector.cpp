@@ -58,11 +58,21 @@ class BotConnection
 {
 private:
 
+	struct BotData
+	{
+		std::vector<uint8_t> data;
+
+		BotData()
+		{
+			data.resize(Config::DataMaxSize + 1);
+		}
+	};
+
 	//Accepts TCP connections
 	boost::asio::ip::tcp::acceptor acceptor;
 
 	//Connections
-	std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<std::vector<uint8_t> > > sockets;
+	std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<BotData> > sockets;
 
 	//Starts accepting new connections
 	void PostAccept(uint32_t count = 1)
@@ -87,11 +97,10 @@ private:
 			s->set_option(boost::asio::ip::tcp::no_delay(true));
 
 			//Add the connection to the list
-			boost::shared_ptr<std::vector<uint8_t> > temp = boost::make_shared<std::vector<uint8_t> >();
-			temp->resize(Config::DataMaxSize + 1);
+			boost::shared_ptr<BotData> temp = boost::make_shared<BotData>();
 			sockets[s] = temp;
 
-			s->async_read_some(boost::asio::buffer(&temp.get()[0], Config::DataMaxSize), boost::bind(&BotConnection::HandleRead, this, s, boost::asio::placeholders::bytes_transferred, boost::asio::placeholders::error));
+			s->async_read_some(boost::asio::buffer(&temp->data[0], Config::DataMaxSize), boost::bind(&BotConnection::HandleRead, this, s, boost::asio::placeholders::bytes_transferred, boost::asio::placeholders::error));
 
 			//Post another accept
 			PostAccept();
@@ -101,61 +110,74 @@ private:
 	//Handles incoming packets
 	void HandleRead(boost::shared_ptr<boost::asio::ip::tcp::socket> s, size_t bytes_transferred, const boost::system::error_code & error)
 	{
-		if(!error && s)
+		std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<BotData> >::iterator itr = sockets.find(s);
+		if(itr != sockets.end())
 		{
-			std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<std::vector<uint8_t> > >::iterator itr = sockets.begin();
-			while(itr != sockets.end())
+			if(error)
 			{
-				if(itr->first == s)
+				if(s)
 				{
-					boost::shared_ptr<std::vector<uint8_t> > data = itr->second;
-					StreamUtility r(&data.get()[0], bytes_transferred);
-
-					uint16_t size = r.Read<uint16_t>();
-					uint16_t opcode = r.Read<uint16_t>();
-					uint8_t direction = r.Read<uint8_t>();
-					r.Read<uint8_t>();
-
-					if(opcode == 1 || opcode == 2)
-					{
-						uint16_t real_opcode = r.Read<uint16_t>();
-
-						//Block opcode
-						if(opcode == 1)
-						{
-							BlockedOpcodes[real_opcode] = true;
-							std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been blocked" << std::endl << std::dec;
-						}
-						//Remove blocked opcode
-						else if(opcode == 2)
-						{
-							boost::unordered_map<uint16_t, bool>::iterator itr = BlockedOpcodes.find(real_opcode);
-							if(itr != BlockedOpcodes.end())
-							{
-								BlockedOpcodes.erase(itr);
-								std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been unblocked" << std::endl << std::dec;
-							}
-						}
-					}
-					else
-					{
-						//Silkroad
-						if(direction == 2 || direction == 4)
-						{
-							InjectSilkroad(opcode, r, direction == 4 ? true : false);
-						}
-						//Joymax
-						else if(direction == 1 || direction == 3)
-						{
-							InjectJoymax(opcode, r, direction == 3 ? true : false);
-						}
-					}
-
-					//Read more data
-					s->async_read_some(boost::asio::buffer(&data.get()[0], Config::DataMaxSize), boost::bind(&BotConnection::HandleRead, this, s, boost::asio::placeholders::bytes_transferred, boost::asio::placeholders::error));
-					break;
+					//Shutdown and close the connection
+					boost::system::error_code ec;
+					s->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+					s->close(ec);
 				}
-			}		
+
+				//Remove the socket from the list
+				sockets.erase(s);
+			}
+			else
+			{
+				std::vector<uint8_t> & data = itr->second->data;
+				StreamUtility r(&data[0], bytes_transferred);
+
+				uint16_t size = r.Read<uint16_t>();
+				uint16_t opcode = r.Read<uint16_t>();
+				uint8_t direction = r.Read<uint8_t>();
+				r.Read<uint8_t>();
+
+				if(opcode == 1 || opcode == 2)
+				{
+					uint16_t real_opcode = r.Read<uint16_t>();
+
+					//Block opcode
+					if(opcode == 1)
+					{
+						BlockedOpcodes[real_opcode] = true;
+						std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been blocked" << std::endl << std::dec;
+					}
+					//Remove blocked opcode
+					else if(opcode == 2)
+					{
+						boost::unordered_map<uint16_t, bool>::iterator itr = BlockedOpcodes.find(real_opcode);
+						if(itr != BlockedOpcodes.end())
+						{
+							BlockedOpcodes.erase(itr);
+							std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been unblocked" << std::endl << std::dec;
+						}
+					}
+				}
+				else
+				{
+					//Remove packet header
+					r.Delete(0, 6);
+					r.SeekRead(0, Seek_Set);
+
+					//Silkroad
+					if(direction == 2 || direction == 4)
+					{
+						InjectSilkroad(opcode, r, direction == 4 ? true : false);
+					}
+					//Joymax
+					else if(direction == 1 || direction == 3)
+					{
+						InjectJoymax(opcode, r, direction == 3 ? true : false);
+					}
+				}
+
+				//Read more data
+				s->async_read_some(boost::asio::buffer(&data[0], Config::DataMaxSize), boost::bind(&BotConnection::HandleRead, this, s, boost::asio::placeholders::bytes_transferred, boost::asio::placeholders::error));
+			}
 		}
 	}
 
@@ -190,28 +212,15 @@ public:
 		r.SeekRead(0, Seek_Set);
 
 		//Iterate all connections
-		std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<std::vector<uint8_t> > >::iterator itr = sockets.begin();
+		std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<BotData> >::iterator itr = sockets.begin();
 		while(itr != sockets.end())
 		{
 			//Send the packet
 			boost::system::error_code ec;
 			boost::asio::write(*itr->first, boost::asio::buffer(w.GetStreamPtr(), w.GetStreamSize()), boost::asio::transfer_all(), ec);
-
-			//Error check
-			if(ec)
-			{
-				//Shutdown and close the connection
-				itr->first->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-				itr->first->close(ec);
-
-				//Remove the socket from the list
-				itr = sockets.erase(itr);
-			}
-			else
-			{
-				//Next
-				++itr;
-			}
+			
+			//Next
+			++itr;
 		}
 	}
 
@@ -220,7 +229,7 @@ public:
 		boost::system::error_code ec;
 
 		//Iterate all connections
-		std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<std::vector<uint8_t> > >::iterator itr = sockets.begin();
+		std::map<boost::shared_ptr<boost::asio::ip::tcp::socket>, boost::shared_ptr<BotData> >::iterator itr = sockets.begin();
 		while(itr != sockets.end())
 		{
 			//Shutdown and close the connection
@@ -230,6 +239,8 @@ public:
 			//Next
 			++itr;
 		}
+
+		sockets.clear();
 	}
 };
 
