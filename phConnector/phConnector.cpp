@@ -61,6 +61,7 @@ private:
 	struct BotData
 	{
 		std::vector<uint8_t> data;
+		StreamUtility pending_stream;
 
 		BotData()
 		{
@@ -128,50 +129,80 @@ private:
 			}
 			else
 			{
+				//Extract structure objects
 				std::vector<uint8_t> & data = itr->second->data;
-				StreamUtility r(&data[0], bytes_transferred);
+				StreamUtility & pending_stream = itr->second->pending_stream;
 
-				uint16_t size = r.Read<uint16_t>();
-				uint16_t opcode = r.Read<uint16_t>();
-				uint8_t direction = r.Read<uint8_t>();
-				r.Read<uint8_t>();
+				//Write the received data to the end of the stream
+				pending_stream.Write<uint8_t>(&data[0], bytes_transferred);
 
-				if(opcode == 1 || opcode == 2)
+				//Total size of stream
+				int32_t total_bytes = pending_stream.GetStreamSize();
+
+				//Make sure there are enough bytes for the packet size to be read
+				while(total_bytes > 2)
 				{
-					uint16_t real_opcode = r.Read<uint16_t>();
+					//Peek the packet size
+					uint16_t required_size = pending_stream.Read<uint16_t>(true) + 6;
 
-					//Block opcode
-					if(opcode == 1)
+					//See if there are enough bytes for this packet
+					if(required_size <= total_bytes)
 					{
-						BlockedOpcodes[real_opcode] = true;
-						std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been blocked" << std::endl << std::dec;
-					}
-					//Remove blocked opcode
-					else if(opcode == 2)
-					{
-						boost::unordered_map<uint16_t, bool>::iterator itr = BlockedOpcodes.find(real_opcode);
-						if(itr != BlockedOpcodes.end())
+						StreamUtility r(pending_stream);
+
+						//Remove this packet from the stream
+						pending_stream.Delete(0, required_size);
+						pending_stream.SeekRead(0, Seek_Set);
+						total_bytes -= required_size;
+
+						uint16_t size = r.Read<uint16_t>();
+						uint16_t opcode = r.Read<uint16_t>();
+						uint8_t direction = r.Read<uint8_t>();
+						r.Read<uint8_t>();
+
+						//Remove the header
+						r.Delete(0, 6);
+						r.SeekRead(0, Seek_Set);
+
+						if(opcode == 1 || opcode == 2)
 						{
-							BlockedOpcodes.erase(itr);
-							std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been unblocked" << std::endl << std::dec;
+							uint16_t real_opcode = r.Read<uint16_t>();
+
+							//Block opcode
+							if(opcode == 1)
+							{
+								BlockedOpcodes[real_opcode] = true;
+								std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been blocked" << std::endl << std::dec;
+							}
+							//Remove blocked opcode
+							else if(opcode == 2)
+							{
+								boost::unordered_map<uint16_t, bool>::iterator itr = BlockedOpcodes.find(real_opcode);
+								if(itr != BlockedOpcodes.end())
+								{
+									BlockedOpcodes.erase(itr);
+									std::cout << "Opcode [0x" << std::hex << std::setfill('0') << std::setw(4) << real_opcode << "] has been unblocked" << std::endl << std::dec;
+								}
+							}
+						}
+						else
+						{
+							//Silkroad
+							if(direction == 2 || direction == 4)
+							{
+								InjectSilkroad(opcode, r, direction == 4 ? true : false);
+							}
+							//Joymax
+							else if(direction == 1 || direction == 3)
+							{
+								InjectJoymax(opcode, r, direction == 3 ? true : false);
+							}
 						}
 					}
-				}
-				else
-				{
-					//Remove packet header
-					r.Delete(0, 6);
-					r.SeekRead(0, Seek_Set);
-
-					//Silkroad
-					if(direction == 2 || direction == 4)
+					else
 					{
-						InjectSilkroad(opcode, r, direction == 4 ? true : false);
-					}
-					//Joymax
-					else if(direction == 1 || direction == 3)
-					{
-						InjectJoymax(opcode, r, direction == 3 ? true : false);
+						//Not enough bytes received for this packet
+						break;
 					}
 				}
 
