@@ -689,7 +689,7 @@ int main(int argc, char* argv[])
 			Config::GatewayPort = pt.get<uint16_t>("phConnector.GatewayPort");
 			Config::BindPort = pt.get<uint16_t>("phConnector.BindPort");
 			Config::BotBind = pt.get<uint16_t>("phConnector.BotBind");
-			Config::DataMaxSize = pt.get<uint16_t>("phConnector.DataMaxSize");
+			Config::DataMaxSize = pt.get<uint32_t>("phConnector.DataMaxSize");
 		}
 		catch(std::exception & e)
 		{
