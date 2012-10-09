@@ -780,11 +780,12 @@ boost::filesystem::path executable_path()
 		executable_path_final = boost::filesystem::path(str);
 #else
 		char temp[2048] = {0};
-		readlink("/proc/self/exe", temp, sizeof(temp));
-
-		std::string str(temp);
-		str.erase(str.begin() + str.find_last_of("/"), str.end());
-		executable_path_final = boost::filesystem::path(str);
+		if(readlink("/proc/self/exe", temp, sizeof(temp)))
+		{
+			std::string str(temp);
+			str.erase(str.begin() + str.find_last_of("/"), str.end());
+			executable_path_final = boost::filesystem::path(str);
+		}
 #endif
 	}
 
