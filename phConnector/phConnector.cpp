@@ -706,11 +706,11 @@ int main(int argc, char* argv[])
 
 		//Create a config file, only need to save once so this part doesn't matter
 		std::fstream fs(boost::filesystem::path(executable_path() / "config.ini").generic_string(), std::ios::out);
-		fs << "[phConnector]\r\n";
-		fs << "GatewayIP=gwgt1.joymax.com\r\n";		//iSRO gateway server
-		fs << "GatewayPort=15779\r\n\r\n";			//iSRO gateway port
-		fs << "BindPort=15779\r\n";					//The port phConnector will listen on
-		fs << "BotBind=22580\r\n\r\n";				//The port the bot or analyzer will connect to
+		fs << "[phConnector]\n";
+		fs << "GatewayIP=gwgt1.joymax.com\n";		//iSRO gateway server
+		fs << "GatewayPort=15779\n";				//iSRO gateway port
+		fs << "BindPort=15779\n";					//The port phConnector will listen on
+		fs << "BotBind=22580\n";					//The port the bot or analyzer will connect to
 		fs << "DataMaxSize=16384";					//Maximum number of bytes to receive in one packet
 		fs.close();
 
